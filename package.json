@@ -10,13 +10,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@tweenjs/tween.js": "^18.6.4",
     "pixi-viewport": "^4.21.1",
     "pixi.js": "^6.0.0",
     "sdfz-demo-parser": "^4.1.1"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.26",
-    "@types/copy-webpack-plugin": "^6.4.0",
     "@types/eslint": "^7.2.7",
     "@types/webpack": "^4.41.26",
     "@types/webpack-dev-server": "^3.11.1",
@@ -24,12 +24,12 @@
     "@typescript-eslint/parser": "^4.16.1",
     "axios": "^0.21.1",
     "cheerio": "^1.0.0-rc.5",
-    "clean-webpack-plugin": "^3.0.0",
     "copy-webpack-plugin": "^8.0.0",
     "eslint": "^7.21.0",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "eslint-plugin-unused-imports": "^1.1.0",
     "html-webpack-plugin": "^4.5.2",
+    "stats.js": "^0.17.0",
     "ts-loader": "^8.0.17",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3",

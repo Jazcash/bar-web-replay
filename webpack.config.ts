@@ -1,6 +1,5 @@
 import * as path from "path";
 import * as webpack from "webpack";
-import { CleanWebpackPlugin } from "clean-webpack-plugin";
 import HtmlWebPackPlugin from "html-webpack-plugin";
 import CopyPlugin from "copy-webpack-plugin";
 
@@ -9,7 +8,8 @@ const clientConfig: webpack.Configuration = {
     entry: path.join(__dirname, "src/app.ts"),
     output: {
         path: path.join(__dirname, "dist"),
-        filename: "[name].js"
+        filename: "[name].js",
+        clean: true
     },
     resolve: {
         modules: [
@@ -33,7 +33,6 @@ const clientConfig: webpack.Configuration = {
         writeToDisk: true
     },
     plugins: [
-        new CleanWebpackPlugin(),
         new HtmlWebPackPlugin({
             template: "src/index.html"
         }),

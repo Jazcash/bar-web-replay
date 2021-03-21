@@ -1,8 +1,8 @@
 import * as PIXI from "pixi.js";
-import { Loader, Texture } from "pixi.js";
+import { Graphics, ILoaderResource, InteractionEvent, Loader, Sprite, Texture } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { DemoModel } from "sdfz-demo-parser";
-import { ReplayPlayer } from "./replay-player";
+import * as TWEEN from "@tweenjs/tween.js";
 
 interface UnitPosition {
     teamId: number;
@@ -18,15 +18,20 @@ interface DataFile {
 }
 
 (async () => {
-    //const trackEl = document.getElementById("tracker");
-
     const mapWidth = 10 * 1024;
     const mapHeight = 6 * 1024;
+    let currentFrameIndex = 0;
+    let tweens: TWEEN.Tween<Sprite>[] = [];
+    let tickerFn: (dt: number) => void = () => {};
 
     const app = new PIXI.Application({
         view: document.getElementById("replay-canvas") as HTMLCanvasElement,
         width: 600,
         height: 500
+    });
+
+    app.ticker.add(() => {
+        TWEEN.update();
     });
 
     const viewport = (window as any).viewport = new Viewport({
@@ -58,89 +63,161 @@ interface DataFile {
 
     const unitDefs = loader.resources["unitdefs"].data as { [unitDefId: number]: string };
     const unitDefIcons = loader.resources["unitdeficons"].data as { [unitDefId: number]: string };
-    const dataFile = loader.resources["data-file"].data as DataFile;
+    const dataFile = (window as any).data = loader.resources["data-file"].data as DataFile;
 
-    const replayPlayer = new ReplayPlayer({
-        replayInfo: dataFile.info,
-        unitPositions: dataFile.unitPositions
+    const mapTexture = loader.resources["map"] as ILoaderResource;
+    const mapSprite = new PIXI.Sprite(mapTexture.texture);
+    mapSprite.width = mapWidth;
+    mapSprite.height = mapHeight;
+    viewport.addChild(mapSprite);
+
+    const unitContainer = new PIXI.Container();
+    unitContainer.sortableChildren = true;
+    viewport.addChild(unitContainer);
+    unitContainer.alpha = 0.01;
+
+    const iconContainer = new PIXI.Container();
+    iconContainer.sortableChildren = true;
+    viewport.addChild(iconContainer);
+
+    viewport.on("zoomed", ({ viewport }) => {
+        if (viewport.scale.x > 0.4) {
+            unitContainer.alpha = 1;
+            iconContainer.alpha = 0.01;
+        } else {
+            unitContainer.alpha = 0.01;
+            iconContainer.alpha = 1;
+            iconContainer.children.forEach(sprite => {
+                sprite.scale.set(1 - viewport.scale.x);
+            });
+        }
     });
 
-    //trackEl.setAttribute("max", `${positions.unitPositions.length}`);
+    const colors: { [teamId: number]: number } = {};
+    for (const player of dataFile.info.players) {
+        const { r, g, b } = player.rgbColor;
+        colors[player.teamId] = PIXI.utils.rgb2hex([r/255, g/255, b/255]);
+    }
 
-    // const mapTexture = loader.resources["map"] as any;
-    // const mapSprite = new PIXI.Sprite(mapTexture.texture);
-    // mapSprite.width = mapWidth;
-    // mapSprite.height = mapHeight;
-    // viewport.addChild(mapSprite);
+    const tracker = new Graphics();
+    tracker.interactive = true;
+    tracker.buttonMode = true;
+    app.stage.addChild(tracker);
+    tracker.on("pointerdown", (event: InteractionEvent) => {
+        const pos = event.data.getLocalPosition(tracker);
+        const percent = pos.x / tracker.width;
+        const frame = Math.floor(dataFile.unitPositions.length * percent);
+        renderGameState(frame);
+    });
 
-    // const unitPics1 = (loader.resources["unitpics1"] as any).textures as { [key: string]: Texture };
-    // const unitPics2 = (loader.resources["unitpics2"] as any).textures as { [key: string]: Texture };
-    // const iconsSheet = (loader.resources["icons"] as any).textures as { [key: string]: Texture };
+    document.addEventListener("keyup", (evt) => {
+        if (evt.key === "ArrowRight") {
+            renderGameState(currentFrameIndex + 1);
+        } else if(evt.key === "ArrowLeft") {
+            renderGameState(currentFrameIndex - 1);
+        }
+    });
 
-    // const unitContainer = new PIXI.Container();
-    // unitContainer.sortableChildren = true;
-    // viewport.addChild(unitContainer);
-    // unitContainer.alpha = 0.01;
+    updateTracker();
+    renderGameState(currentFrameIndex);
 
-    // const iconContainer = new PIXI.Container();
-    // iconContainer.sortableChildren = true;
-    // viewport.addChild(iconContainer);
+    async function renderGameState(frameIndex: number) {
+        currentFrameIndex = frameIndex;
 
-    // viewport.on("zoomed", ({ viewport }) => {
-    //     if (viewport.scale.x > 0.4) {
-    //         unitContainer.alpha = 1;
-    //         iconContainer.alpha = 0.01;
-    //     } else {
-    //         unitContainer.alpha = 0.01;
-    //         iconContainer.alpha = 1;
-    //         iconContainer.children.forEach(sprite => {
-    //             sprite.scale.set(1 - viewport.scale.x);
-    //         });
-    //     }
-    // });
+        app.ticker.remove(tickerFn);
 
-    // const colors: { [teamId: number]: number } = {};
-    // for (const player of positions.info.players) {
-    //     const { r, g, b } = player.rgbColor;
-    //     colors[player.teamId] = PIXI.utils.rgb2hex([r/255, g/255, b/255]);
-    // }
+        tweens.forEach(tween => {
+            tween.end();
+            tween.stop();
+        });
+        tweens = [];
 
-    // renderGameState(positions.unitPositions[0].positions);
+        unitContainer.removeChildren();
+        iconContainer.removeChildren();
 
-    // function renderGameState(unitPositions: UnitPosition[]) {
-    //     for (const unitPos of unitPositions) {
-    //         const unitDefKey = unitDefs[unitPos.unitDefId];
-    //         const sprite = createUnitSprite(unitDefKey);
-    //         sprite.x = unitPos.x;
-    //         sprite.y = unitPos.z;
-    //         sprite.anchor.set(0.5);
-    //         sprite.scale.set(0.3);
-    //         sprite.zIndex = unitPos.z;
-    //         unitContainer.addChild(sprite);
+        const frameUnits = dataFile.unitPositions[frameIndex];
+        const nextFrameUnits = dataFile.unitPositions[frameIndex + 1];
+        const frameDeltaMs = ((nextFrameUnits.frame - frameUnits.frame) / 30) * 1000;
 
-    //         const iconKey = unitDefIcons[unitDefKey];
-    //         const icon = new PIXI.Sprite(iconsSheet[iconKey]);
-    //         icon.x = unitPos.x;
-    //         icon.y = unitPos.z;
-    //         icon.anchor.set(0.5);
-    //         icon.scale.set(1 - viewport.scale.x);
-    //         icon.zIndex = unitPos.z;
-    //         icon.tint = colors[unitPos.teamId];
-    //         iconContainer.addChild(icon);
+        for (const unitPos of frameUnits.positions) {
+            const nextUnitPos = nextFrameUnits.positions.find(unit => unit.unitId === unitPos.unitId);
 
-    //         const debugText = new PIXI.Text(`${unitPos.unitId} - ${unitPos.unitDefId}`);
-    //         debugText.x = unitPos.x;
-    //         debugText.y = unitPos.z - 40;
-    //         debugText.zIndex = 99999;
-    //         debugText.anchor.set(0.5);
-    //         unitContainer.addChild(debugText);
-    //     }
-    // }
+            const unitDefKey = unitDefs[unitPos.unitDefId];
+            const sprite = createUnitSprite(unitDefKey);
+            sprite.x = unitPos.x;
+            sprite.y = unitPos.z;
+            sprite.anchor.set(0.5);
+            sprite.scale.set(0.3);
+            sprite.tint = colors[unitPos.teamId];
+            sprite.zIndex = unitPos.z;
+            unitContainer.addChild(sprite);
 
-    // function createUnitSprite(unitDefKey: string) : PIXI.Sprite {
-    //     const texture = unitPics1[unitDefKey] ?? unitPics2[unitDefKey];
-    //     return new PIXI.Sprite(texture);
-    // }
+            if (nextUnitPos && (unitPos.x !== nextUnitPos.x || unitPos.z !== nextUnitPos.z)) {
+                const unitPicTween = new TWEEN.Tween(sprite).to({ x: nextUnitPos.x, y: nextUnitPos.z }, frameDeltaMs).start();
+                tweens.push(unitPicTween);
+            }
+
+            const iconKey = unitDefIcons[unitDefKey];
+            const icon = new PIXI.Sprite(getTexture("icons", iconKey));
+            icon.x = unitPos.x;
+            icon.y = unitPos.z;
+            icon.anchor.set(0.5);
+            icon.scale.set(1 - viewport.scale.x);
+            icon.zIndex = unitPos.z;
+            icon.tint = colors[unitPos.teamId];
+            iconContainer.addChild(icon);
+
+            if (nextUnitPos && (unitPos.x !== nextUnitPos.x || unitPos.z !== nextUnitPos.z)) {
+                const iconTween = new TWEEN.Tween(icon).to({ x: nextUnitPos.x, y: nextUnitPos.z }, frameDeltaMs).start();
+                tweens.push(iconTween);
+            }
+
+            const debugText = new PIXI.Text(`#${unitPos.unitId} - ${unitPos.unitDefId}`, {
+                fontSize: 40
+            });
+            debugText.anchor.set(0.5);
+            sprite.addChild(debugText);
+            debugText.y = -150;
+        }
+
+        updateTracker();
+
+        await delay(frameDeltaMs);
+
+        renderGameState(currentFrameIndex + 1);
+    }
+
+    function updateTracker() {
+        const width = app.view.width * (currentFrameIndex / dataFile.unitPositions.length);
+
+        tracker.clear();
+        tracker.beginFill(0x333333).drawRect(0, app.view.height - 20, app.view.width, 20);
+        tracker.beginFill(0xff0000).drawRect(0, app.view.height - 20, width, 20);
+    }
+
+    function createUnitSprite(unitDefKey: string) : PIXI.Sprite {
+        const texture = getTexture("unitpics1", unitDefKey) ?? getTexture("unitpics2", unitDefKey);
+        return new PIXI.Sprite(texture);
+    }
+
+    function getTexture(sheetKey: string, frameName: string) {
+        return (loader.resources[sheetKey] as ILoaderResource).textures[frameName];
+    }
+
+    function delay(delayMs: number) {
+        return new Promise<void>(resolve => {
+            let progress = 0;
+            tickerFn = function(dt: number) {
+                progress += dt;
+                const elapsedMs = progress / (60 * PIXI.Ticker.shared.speed) * 1000;
+                if (elapsedMs >= delayMs) {
+                    resolve();
+                    app.ticker.remove(tickerFn);
+                }
+            }
+            app.ticker.add(tickerFn);
+        });
+    }
 })();
 
 function load(loader: PIXI.Loader) {
