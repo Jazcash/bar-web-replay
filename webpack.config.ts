@@ -9,7 +9,7 @@ const clientConfig: webpack.Configuration = {
     output: {
         path: path.join(__dirname, "dist"),
         filename: "[name].js",
-        clean: true
+        //clean: true
     },
     resolve: {
         modules: [
@@ -28,7 +28,6 @@ const clientConfig: webpack.Configuration = {
         ],
     },
     devServer: {
-        contentBase: path.join(__dirname, "test"),
         port: 9000,
         writeToDisk: true
     },

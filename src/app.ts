@@ -47,8 +47,7 @@ interface DataFile {
     
     const loader = (window as any).loader = Loader.shared;
     
-    loader.add("unitpics1", "atlases/unitpics-0.json");
-    loader.add("unitpics2", "atlases/unitpics-1.json");
+    loader.add("unitpics", "atlases/unitpics-0.json");
     loader.add("icons", "atlases/icons-0.json");
     loader.add("map", "test/texture-hq.png");
     loader.add("data-file", "test/20210307_235406_DSDR 3_104.0.1-1804-g4976884 BAR_positions.json");
@@ -81,7 +80,7 @@ interface DataFile {
     viewport.addChild(iconContainer);
 
     viewport.on("zoomed", ({ viewport }) => {
-        if (viewport.scale.x > 0.4) {
+        if (viewport.scale.x > 0.3) {
             unitContainer.alpha = 1;
             iconContainer.alpha = 0.01;
         } else {
@@ -143,7 +142,7 @@ interface DataFile {
             const nextUnitPos = nextFrameUnits.positions.find(unit => unit.unitId === unitPos.unitId);
 
             const unitDefKey = unitDefs[unitPos.unitDefId];
-            const sprite = createUnitSprite(unitDefKey);
+            const sprite = new PIXI.Sprite(getTexture("unitpics", unitDefKey));
             sprite.x = unitPos.x;
             sprite.y = unitPos.z;
             sprite.anchor.set(0.5);
@@ -193,11 +192,6 @@ interface DataFile {
         tracker.clear();
         tracker.beginFill(0x333333).drawRect(0, app.view.height - 20, app.view.width, 20);
         tracker.beginFill(0xff0000).drawRect(0, app.view.height - 20, width, 20);
-    }
-
-    function createUnitSprite(unitDefKey: string) : PIXI.Sprite {
-        const texture = getTexture("unitpics1", unitDefKey) ?? getTexture("unitpics2", unitDefKey);
-        return new PIXI.Sprite(texture);
     }
 
     function getTexture(sheetKey: string, frameName: string) {
